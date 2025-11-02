@@ -1,0 +1,28 @@
+#配置文件指南：https://jmcomic.readthedocs.io/zh-cn/latest/option_file_syntax/#2-option
+log: true
+client:
+  # retry_times: 请求失败重试次数
+  retry_times: 2
+
+dir_rule:
+  base_dir: ./download
+
+# 下载配置
+download:
+  cache: true # 如果要下载的文件在磁盘上已存在，不用再下一遍了吧？默认为true
+
+plugins:
+  after_init:
+    - plugin: log_topic_filter # 日志topic过滤插件
+      kwargs:
+        whitelist: [ # 只保留api和html，这两个是Client发请求时会打的日志topic
+          'album.before',
+          'album.after',
+          'plugin.img2pdf',
+        ]
+
+  after_album:
+    - plugin: img2pdf
+      kwargs:
+        pdf_dir: ./pdf/ # pdf存放文件夹
+        filename_rule: Aname # pdf命名规则，A代表album, name代表使用album.name也就是本子名
