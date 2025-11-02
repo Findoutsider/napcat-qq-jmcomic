@@ -14,7 +14,7 @@ from datetime import datetime
 import logging
 
 app = FastAPI()
-admin_id = 3527648554
+admin_id = 123456  # 管理者QQ号
 
 HTTP_PORT = 8081
 WEBSOCKET_URL = "ws://127.0.0.1:3001"
@@ -370,4 +370,5 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
+
         log("[🛑 SYSTEM]", "用户手动终止程序")
