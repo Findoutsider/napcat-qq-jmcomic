@@ -75,7 +75,11 @@ cd napcat-qq-jmcomic
 
 编辑 `option.yml`，配置禁漫账号与下载路径（参考 jmcomic 官方说明）。
 
-3. **运行 Napcat HTTP 客户 和 WebSocket 服务**
+3. **配置管理者QQ号**
+
+在 `mian.py` 源码中修改`admin_id`变量，改成管理者QQ号
+
+4. **运行 Napcat HTTP 客户 和 WebSocket 服务**
 
 在 Napcat 网络配置中，启用 **HTTP客户段** 并设置为：
 ```
@@ -87,7 +91,7 @@ http://localhost:8081
 127.0.0.1:3001
 ```
 
-4. **启动机器人**
+5. **启动机器人**
 
 ```bash
 python main.py
