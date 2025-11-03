@@ -173,4 +173,5 @@ python main.py
 ## 💡 致谢
 
 - [JMComic-Crawler-Python](https://github.com/hect0x7/JMComic-Crawler-Python) - 禁漫漫画下载库  
-- [Napcat](https://github.com/NapNeko/NapcatQQ) - QQ 协议端实现  
+- [Napcat](https://github.com/NapNeko/NapcatQQ) - QQ 协议端实现
+- [FastAPI](https://fastapi.tiangolo.com/) - 高性能 Python Web 框架  
