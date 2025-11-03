@@ -53,6 +53,18 @@ def log(tag: str, msg: str, level="info"):
     else:
         logger.info(full_msg)
 
+def get_total_memory_mb():
+    """返回主进程 + 所有子进程的总内存占用（MB）"""
+    process = psutil.Process(os.getpid())
+    main_mem = process.memory_info().rss
+    child_mem = 0
+    for child in process.children(recursive=True):
+        try:
+            child_mem += child.memory_info().rss
+        except psutil.NoSuchProcess:
+            pass
+    return main_mem / 1024 / 1024, child_mem / 1024 / 1024
+
 # ================ 信息发送类 ================
 class NapcatWebSocketBot:
     def __init__(self, websocket_url):
@@ -183,7 +195,9 @@ def jm_download(number):
     process = psutil.Process(os.getpid())
 
     while p.is_alive():
-        #time.sleep(2)
+        time.sleep(3)
+        main_mem,child_mem = get_total_memory_mb()
+        log("[⬇️ DOWNLOADER]", f"下载期间检测内存，主进程内存：{main_mem:.2f} MB ，子进程下载进程内存：{child_mem:.2f} MB")
         if time.time() - start_time > timeout:
             log("[⚠️ JM]", "下载超时，终止进程")
             p.terminate()
@@ -198,7 +212,7 @@ def jm_download(number):
 
 def find_file_by_name(title):
     """根据标题查找PDF"""
-    safe_title = title.replace("?", "_").replace("/", "_")
+    safe_title = title.title.replace("?", "_").replace("/", "_").replace('"', "_")
     file_name = f"{safe_title}.pdf"
     file_path = os.path.join(FILE_DIR, file_name)
     if os.path.exists(file_path):
@@ -212,7 +226,7 @@ async def process_jm_command(number, message_type, group_id, user_id):
     try:
         page = client.search_site(search_query=str(number))
         album = page.single_album
-        title = album.title.replace("?", "_").replace("/", "_")
+        title = album.title
         if not title:
             log("[🚫 JM]", "本子标题为空，无法下载")
             return "❌ 本子标题为空"
@@ -220,9 +234,9 @@ async def process_jm_command(number, message_type, group_id, user_id):
             log("[🚫 JM]", "本子章节太多，不支持下载")
             return f"❌ 本子章节过多(>{get_download_max_epiosdes()})"
 
-        file_path, _ = find_file_by_name(title)
+        file_path, file_name = find_file_by_name(title)
         if file_path:
-            log("[✅ JM]", f"本地已存在该本子{number}")
+            log("[✅ JM]", f"本地已存在该本子{number}：{file_name}")
             await send_message(message_type, group_id, user_id, f"📘 本地已存在本子 {number}")
             success = True
         else:
@@ -233,8 +247,9 @@ async def process_jm_command(number, message_type, group_id, user_id):
         return "❌ 未能成功下载（可能ID错误或网络失败）"
 
     if success:
-        file_path, _ = find_file_by_name(title)
+        file_path, file_name = find_file_by_name(title)
         if not file_path:
+            log("[❌ JM]", f"下载本子{number}：{file_name}完成，但未找到PDF文件")
             return "❌ 下载完成但未找到PDF文件"
         file_size = os.path.getsize(file_path) / (1024 * 1024)
         msg = f"✅ 天堂正在发送：\n车牌号：{number}\n本子名：{title}\n文件大小：({file_size:.2f}MB)"
@@ -245,6 +260,7 @@ async def process_jm_command(number, message_type, group_id, user_id):
         log("[✅ JM]", f"本子 {number} 处理完成并发送完成")
         return msg
     else:
+        log("[❌ DOWNLOADER]", "下载失败或超时")
         return "❌ 下载失败或超时"
 
 
@@ -280,6 +296,7 @@ async def root(request: Request):
         return {"status": "error", "message": str(e)}
 
 
+# ================== 消息处理 ==================
 async def send_message(message_type, group_id, user_id, message):
     if message_type == "group" and group_id:
         await bot.send_group_message(group_id, message)
@@ -328,33 +345,35 @@ async def handle_message_event(data):
         await send_message(message_type, group_id, user_id, f"📘 章节数阈值已设为 {num}")
         return
 
-    if not get_jm_condition() and (match_JM or match_JML):
-        requester_information(message_type, data.get('group_name'), data.get('sender').get('nickname'), group_id, user_id, number, "处理")
-        log("[🚫 Request]", "请求驳回，禁漫功能已关闭")
-        await send_message(message_type, group_id, user_id, "禁漫功能未开启")
-        return
-
     # 下载或查看逻辑
-    global jm_is_running
-    if jm_is_running and (match_JM or match_JML):
+    if get_jm_running() and (match_JM or match_JML):
+        number = match_JM.group(1) if match_JM else match_JML.group(1)
         requester_information(message_type, data.get('group_name'), data.get('sender').get('nickname'), group_id, user_id, number, "处理")
-        log("[🚫 Request]", "请求驳回，其他本子正在处理中")
+        log("[🚫 Request]", f"本子{number}请求驳回，其他本子正在处理中")
         await send_message(message_type, group_id, user_id, "🚫 正在处理其他本子，请稍候")
         return
 
-    jm_is_running = True
+    set_jm_running(True)
     if match_JM:
         number = match_JM.group(1)
         requester_information(message_type, data.get('group_name'), data.get('sender').get('nickname'), group_id, user_id, number, "下载")
-        response = await process_jm_command(number, message_type, group_id, user_id)
-        await send_message(message_type, group_id, user_id, response)
+        if get_jm_condition():
+            response = await process_jm_command(number, message_type, group_id, user_id)
+            await send_message(message_type, group_id, user_id, response)
+        else:
+            log("[🚫 Request]", "本子{number}检索请求驳回，禁漫功能已关闭")
+            await send_message(message_type, group_id, user_id, "❌ 禁漫功能未开启")
     elif match_JML:
         number = match_JML.group(1)
         requester_information(message_type, data.get('group_name'), data.get('sender').get('nickname'), group_id, user_id, number, "检索")
-        await send_message(message_type, group_id, user_id, f"🔍 正在检索本子 {number}")
-        info = await look_jm_information(number)
-        await send_message(message_type, group_id, user_id, info)
-    jm_is_running = False
+        if get_jm_condition():
+            await send_message(message_type, group_id, user_id, f"🔍 正在检索本子 {number}")
+            info = await look_jm_information(number)
+            await send_message(message_type, group_id, user_id, info)
+        else:
+            log("[🚫 Request]", "本子{number}下载请求驳回，禁漫功能已关闭")
+            await send_message(message_type, group_id, user_id, "❌ 禁漫功能未开启")
+    set_jm_running(False)
 
 
 # ====================== 内存管理任务 ======================
@@ -364,26 +383,24 @@ async def periodic_cleanup():
         await asyncio.sleep(300)
         if hasattr(gc, "collect"):
             gc.collect()
-        process = psutil.Process(os.getpid())
-        mem = process.memory_info().rss / 1024 / 1024
-        log("[🚀 SYSTEM]", f"定期检测内存: {mem:.2f} MB")
+        main_mem,child_mem = get_total_memory_mb()
+        log("[🚀 SYSTEM]", f"定期检测内存，总内存：{(main_mem+child_mem):.2f} MB ，主进程内存：{main_mem:.2f} MB ，子进程内存：{child_mem:.2f} MB")
 
         if get_jm_running():
             log("[📘 SYSTEM]", "检测到任务运行中，跳过重启检查")
             continue
 
-        if mem > 600:
+        if (main_mem+child_mem)> 600:
             log("[⚠️ SYSTEM]", "检测到空闲状态且内存超限，准备自动重启")
             os._exit(0)
 
 
 # ====================== 主函数入口 ======================
 async def main():
-    print("🚀 Napcat QQ机器人启动中...")
-    print(f"📁 文件目录: {os.path.abspath(FILE_DIR)}")
-    print(f"🌐 WebSocket服务器: {WEBSOCKET_URL}")
-    print(f"🔗 HTTP监听端口: {HTTP_PORT}")
-
+    log("[🚀 SYSTEM]","Napcat QQ机器人启动中...")
+    log("[📁 SYSTEM]",f"文件目录: {os.path.abspath(FILE_DIR)}")
+    log("[🌐 SYSTEM]",f"WebSocket服务器: {WEBSOCKET_URL}")
+    log("[🔗 SYSTEM]",f"HTTP监听端口: {HTTP_PORT}")
     asyncio.create_task(periodic_cleanup())
 
     config = uvicorn.Config(app, host="127.0.0.1", port=HTTP_PORT, loop="asyncio", access_log=False)
@@ -392,11 +409,8 @@ async def main():
 
 
 if __name__ == "__main__":
-    log("[🚀 SYSTEM]", "JM 下载管理器启动")
+    #log("[🚀 SYSTEM]", "JM 下载管理器启动")
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
         log("[🛑 SYSTEM]", "用户手动终止程序")
-
-
-
