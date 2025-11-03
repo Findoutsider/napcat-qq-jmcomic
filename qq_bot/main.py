@@ -212,7 +212,7 @@ def jm_download(number):
 
 def find_file_by_name(title):
     """根据标题查找PDF"""
-    safe_title = title.title.replace("?", "_").replace("/", "_").replace('"', "_")
+    safe_title = title.replace("?", "_").replace("/", "_").replace('"', "_")
     file_name = f"{safe_title}.pdf"
     file_path = os.path.join(FILE_DIR, file_name)
     if os.path.exists(file_path):
@@ -414,3 +414,4 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         log("[🛑 SYSTEM]", "用户手动终止程序")
+
