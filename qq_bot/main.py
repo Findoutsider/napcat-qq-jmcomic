@@ -19,7 +19,7 @@ from logging.handlers import TimedRotatingFileHandler
 
 # ====================== 基础配置 ======================
 app = FastAPI()
-admin_id = 2275016544  # 管理者QQ号
+admin_id = 123456  # 管理者QQ号
 
 HTTP_PORT = 8081  # HTTP客户端端口
 WEBSOCKET_URL = "ws://127.0.0.1:3001"  # Websocket服务器地址
@@ -477,3 +477,4 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         log("[🛑 SYSTEM]", "用户手动终止程序")
+
